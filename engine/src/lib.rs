@@ -1,3 +1,6 @@
+pub mod board;
+pub mod types;
+
 use pyo3::prelude::*;
 
 #[pymodule]
@@ -10,6 +13,7 @@ fn engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
 pub fn add(left: u64, right: u64) -> u64 {
     left + right
 }
+
 
 #[cfg(test)]
 mod tests {
