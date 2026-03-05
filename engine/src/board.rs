@@ -1,3 +1,4 @@
+use crate::error::FenError;
 use crate::types::Color;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,220 +98,8 @@ impl Board {
         }
     }
 
-    pub fn from_fen(fen: &str) -> Result<Self, String> {
-        let mut board = Board::empty();
-
-        // Zero-allocation field extraction
-        let mut fen_fields = fen.split_ascii_whitespace();
-        let board_str = fen_fields
-            .next()
-            .ok_or("Invalid FEN: Missing board field")?;
-        let color_str = fen_fields
-            .next()
-            .ok_or("Invalid FEN: Missing color field")?;
-        let castling_str = fen_fields
-            .next()
-            .ok_or("Invalid FEN: Missing castling field")?;
-        let en_passant_str = fen_fields
-            .next()
-            .ok_or("Invalid FEN: Missing en passant field")?;
-        let half_move_str = fen_fields
-            .next()
-            .ok_or("Invalid FEN: Missing half-move field")?;
-        let full_move_str = fen_fields
-            .next()
-            .ok_or("Invalid FEN: Missing full-move field")?;
-
-        // Set piece positions
-        let rank_strings = board_str.split('/');
-
-        if rank_strings.clone().count() != 8 {
-            return Err("Invalid FEN: Expected 8 ranks".to_string());
-        }
-
-        for (i, rank_str) in rank_strings.enumerate() {
-            let rank_index = 7 - u32::try_from(i)
-                .map_err(|_| format!("Invalid FEN: Rank index overflow at {}", i))?;
-            let mut file_index = 0;
-
-            for byte in rank_str.bytes() {
-                if byte.is_ascii_digit() {
-                    let empty_squares = u32::from(byte - b'0');
-
-                    if !(1..=8).contains(&empty_squares) {
-                        return Err(
-                            "Invalid FEN: Rank has invalid number of empty squares".to_string()
-                        );
-                    }
-
-                    file_index += empty_squares;
-
-                    if file_index > 8 {
-                        let rank = rank_index + 1;
-                        return Err(format!("Invalid FEN: Rank {rank} has more than 8 files"));
-                    }
-
-                    continue;
-                }
-
-                if byte.is_ascii_alphabetic() {
-                    if file_index >= 8 {
-                        let rank = rank_index + 1;
-                        return Err(format!("Invalid FEN: Rank {rank} has more than 8 files"));
-                    }
-
-                    let square_index = rank_index * 8 + file_index;
-                    match byte {
-                        b'P' => {
-                            board.white_pawns |= 1u64 << square_index;
-                        }
-                        b'p' => {
-                            board.black_pawns |= 1u64 << square_index;
-                        }
-                        b'N' => {
-                            board.white_knights |= 1u64 << square_index;
-                        }
-                        b'n' => {
-                            board.black_knights |= 1u64 << square_index;
-                        }
-                        b'B' => {
-                            board.white_bishops |= 1u64 << square_index;
-                        }
-                        b'b' => {
-                            board.black_bishops |= 1u64 << square_index;
-                        }
-                        b'R' => {
-                            board.white_rooks |= 1u64 << square_index;
-                        }
-                        b'r' => {
-                            board.black_rooks |= 1u64 << square_index;
-                        }
-                        b'Q' => {
-                            board.white_queens |= 1u64 << square_index;
-                        }
-                        b'q' => {
-                            board.black_queens |= 1u64 << square_index;
-                        }
-                        b'K' => {
-                            board.white_king |= 1u64 << square_index;
-                        }
-                        b'k' => {
-                            board.black_king |= 1u64 << square_index;
-                        }
-                        _ => {
-                            return Err(format!("Invalid board character: {}", byte as char));
-                        }
-                    }
-                    file_index += 1;
-                    continue;
-                }
-
-                return Err(format!("Invalid board character: {}", byte as char));
-            }
-
-            if file_index != 8 {
-                let rank = rank_index + 1;
-                return Err(format!("Invalid FEN: Rank {rank} has fewer than 8 files"));
-            }
-        }
-
-        // Set active color
-        match color_str {
-            "w" => {
-                board.active_color = Color::White;
-            }
-            "b" => {
-                board.active_color = Color::Black;
-            }
-            _ => {
-                return Err("Invalid color".to_string());
-            }
-        }
-
-        // Set castling rights
-        if castling_str == "-" {
-            board.castling_rights = 0;
-        } else {
-            for byte in castling_str.bytes() {
-                match byte {
-                    b'-' => {
-                        break;
-                    }
-                    b'K' => {
-                        board.castling_rights |= 0b0001;
-                    }
-                    b'Q' => {
-                        board.castling_rights |= 0b0010;
-                    }
-                    b'k' => {
-                        board.castling_rights |= 0b0100;
-                    }
-                    b'q' => {
-                        board.castling_rights |= 0b1000;
-                    }
-                    _ => {
-                        return Err(format!("Invalid castling character: {}", byte as char));
-                    }
-                }
-            }
-        }
-
-        // Set en passant target square
-        'ept: {
-            if en_passant_str == "-" {
-                break 'ept;
-            }
-
-            if en_passant_str.len() != 2 {
-                return Err(format!(
-                    "Invalid en passant target square: {en_passant_str}"
-                ));
-            }
-
-            let bytes = en_passant_str.as_bytes();
-            let file_char = bytes[0];
-            let rank_char = bytes[1];
-
-            if !(b'a'..=b'h').contains(&file_char) || !(b'1'..=b'8').contains(&rank_char) {
-                return Err(format!(
-                    "Invalid en passant target square: {en_passant_str}"
-                ));
-            }
-
-            let en_passant_target_rank = rank_char - b'1';
-            let en_passant_target_file = file_char - b'a';
-            let en_passant_target_index = en_passant_target_rank * 8 + en_passant_target_file;
-
-            board.en_passant_target = Some(en_passant_target_index);
-        }
-
-        // Set the half-move clock
-        board.half_move_clock = half_move_str
-            .parse::<u8>()
-            .map_err(|_| format!("Invalid half-move clock: {half_move_str}"))?;
-
-        // Set the full-move number
-        board.full_move_number = full_move_str
-            .parse::<u16>()
-            .map_err(|_| format!("Invalid full-move number: {full_move_str}"))?;
-
-        // Calculate occupancies
-        board.white_occupancy = board.white_pawns
-            | board.white_knights
-            | board.white_bishops
-            | board.white_rooks
-            | board.white_queens
-            | board.white_king;
-        board.black_occupancy = board.black_pawns
-            | board.black_knights
-            | board.black_bishops
-            | board.black_rooks
-            | board.black_queens
-            | board.black_king;
-        board.all_occupancy = board.white_occupancy | board.black_occupancy;
-
-        // Return the board
-        Ok(board)
+    pub fn from_fen(fen: &str) -> Result<Self, FenError> {
+        fen.parse()
     }
 
     pub fn is_legal(&self) -> bool {
@@ -336,5 +125,161 @@ impl Board {
 impl Default for Board {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl std::str::FromStr for Board {
+    type Err = FenError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut board = Board::empty();
+
+        // Zero-allocation field extraction
+        let mut fen_fields = s.split_ascii_whitespace();
+        let board_str = fen_fields.next().ok_or(FenError::MissingField("board"))?;
+        let color_str = fen_fields.next().ok_or(FenError::MissingField("color"))?;
+        let castling_str = fen_fields.next().ok_or(FenError::MissingField("castling"))?;
+        let en_passant_str = fen_fields.next().ok_or(FenError::MissingField("en_passant"))?;
+        let half_move_str = fen_fields.next().ok_or(FenError::MissingField("half_move"))?;
+        let full_move_str = fen_fields.next().ok_or(FenError::MissingField("full_move"))?;
+
+        // Set piece positions
+        let rank_strings = board_str.split('/');
+
+        let ranks_count = rank_strings.clone().count();
+        if ranks_count != 8 {
+            return Err(FenError::InvalidRanksCount(ranks_count));
+        }
+
+        for (i, rank_str) in rank_strings.enumerate() {
+            #[allow(clippy::cast_possible_truncation)]
+            let rank_index = 7 - (i as u32);
+            let mut file_index = 0;
+
+            for byte in rank_str.bytes() {
+                if byte.is_ascii_digit() {
+                    let empty_squares = u32::from(byte - b'0');
+
+                    if !(1..=8).contains(&empty_squares) {
+                        return Err(FenError::InvalidEmptySquares(empty_squares as u8));
+                    }
+
+                    file_index += empty_squares;
+
+                    if file_index > 8 {
+                        let rank = rank_index + 1;
+                        return Err(FenError::TooManyFilesInRank(rank));
+                    }
+
+                    continue;
+                }
+
+                if byte.is_ascii_alphabetic() {
+                    if file_index >= 8 {
+                        let rank = rank_index + 1;
+                        return Err(FenError::TooManyFilesInRank(rank));
+                    }
+
+                    let square_index = rank_index * 8 + file_index;
+                    match byte {
+                        b'P' => board.white_pawns |= 1u64 << square_index,
+                        b'p' => board.black_pawns |= 1u64 << square_index,
+                        b'N' => board.white_knights |= 1u64 << square_index,
+                        b'n' => board.black_knights |= 1u64 << square_index,
+                        b'B' => board.white_bishops |= 1u64 << square_index,
+                        b'b' => board.black_bishops |= 1u64 << square_index,
+                        b'R' => board.white_rooks |= 1u64 << square_index,
+                        b'r' => board.black_rooks |= 1u64 << square_index,
+                        b'Q' => board.white_queens |= 1u64 << square_index,
+                        b'q' => board.black_queens |= 1u64 << square_index,
+                        b'K' => board.white_king |= 1u64 << square_index,
+                        b'k' => board.black_king |= 1u64 << square_index,
+                        _ => return Err(FenError::InvalidCharacter(byte as char)),
+                    }
+                    file_index += 1;
+                    continue;
+                }
+
+                return Err(FenError::InvalidCharacter(byte as char));
+            }
+
+            if file_index != 8 {
+                let rank = rank_index + 1;
+                return Err(FenError::TooManyFilesInRank(rank));
+            }
+        }
+
+        // Set active color
+        match color_str {
+            "w" => board.active_color = Color::White,
+            "b" => board.active_color = Color::Black,
+            _ => return Err(FenError::InvalidColor(color_str.to_string())),
+        }
+
+        // Set castling rights
+        if castling_str == "-" {
+            board.castling_rights = 0;
+        } else {
+            for byte in castling_str.bytes() {
+                match byte {
+                    b'-' => break,
+                    b'K' => board.castling_rights |= 0b0001,
+                    b'Q' => board.castling_rights |= 0b0010,
+                    b'k' => board.castling_rights |= 0b0100,
+                    b'q' => board.castling_rights |= 0b1000,
+                    _ => return Err(FenError::InvalidCastlingCharacter(byte as char)),
+                }
+            }
+        }
+
+        // Set en passant target square
+        if en_passant_str != "-" {
+            let bytes = en_passant_str.as_bytes();
+
+            if bytes.len() != 2 {
+                return Err(FenError::InvalidEnPassantTarget(en_passant_str.to_string()));
+            }
+
+            let file_char = bytes[0];
+            let rank_char = bytes[1];
+
+            if !(b'a'..=b'h').contains(&file_char) || !(b'1'..=b'8').contains(&rank_char) {
+                return Err(FenError::InvalidEnPassantTarget(en_passant_str.to_string()));
+            }
+
+            let rank = rank_char - b'1';
+            let file = file_char - b'a';
+            board.en_passant_target = Some(rank * 8 + file);
+        }
+
+        // Set the half-move clock
+        board.half_move_clock = half_move_str
+            .parse::<u8>()
+            .map_err(|_| FenError::InvalidHalfMoveClock(half_move_str.to_string()))?;
+
+        // Set the full-move number
+        board.full_move_number = full_move_str
+            .parse::<u16>()
+            .map_err(|_| FenError::InvalidFullMoveNumber(full_move_str.to_string()))?;
+
+        // Calculate occupancies
+        board.white_occupancy = board.white_pawns
+            | board.white_knights
+            | board.white_bishops
+            | board.white_rooks
+            | board.white_queens
+            | board.white_king;
+
+        board.black_occupancy = board.black_pawns
+            | board.black_knights
+            | board.black_bishops
+            | board.black_rooks
+            | board.black_queens
+            | board.black_king;
+
+        board.all_occupancy = board.white_occupancy | board.black_occupancy;
+
+        // Return the board
+        Ok(board)
     }
 }
