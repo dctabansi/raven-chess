@@ -25,7 +25,7 @@ pub struct Board {
 
     pub castling_rights: u8,
 
-    pub en_passant_target: Option<u8>,
+    pub en_passant_target: u64,
 
     pub half_move_clock: u8,
     pub full_move_number: u16,
@@ -59,7 +59,7 @@ impl Board {
             // 0b1111 represents KQkq (W King-side, W Queen-side, B King-side, B Queen-side)
             castling_rights: 0b1111,
 
-            en_passant_target: None,
+            en_passant_target: 0,
 
             half_move_clock: 0,
             full_move_number: 1,
@@ -90,7 +90,7 @@ impl Board {
 
             castling_rights: 0,
 
-            en_passant_target: None,
+            en_passant_target: 0,
 
             half_move_clock: 0,
 
@@ -249,7 +249,7 @@ impl std::str::FromStr for Board {
 
             let rank = rank_char - b'1';
             let file = file_char - b'a';
-            board.en_passant_target = Some(rank * 8 + file);
+            board.en_passant_target = 1u64 << (rank * 8 + file);
         }
 
         // Set the half-move clock

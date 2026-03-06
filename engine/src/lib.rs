@@ -1,6 +1,7 @@
 pub mod board;
 pub mod error;
 pub mod types;
+pub mod movegen;
 
 use pyo3::prelude::*;
 
