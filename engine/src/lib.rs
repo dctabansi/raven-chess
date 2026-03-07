@@ -1,7 +1,9 @@
+pub mod attacks;
 pub mod board;
 pub mod error;
-pub mod types;
+pub mod magics;
 pub mod movegen;
+pub mod types;
 
 use pyo3::prelude::*;
 

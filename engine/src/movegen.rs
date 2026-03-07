@@ -1,5 +1,6 @@
+use crate::attacks::{KING_ATTACKS, KNIGHT_ATTACKS};
 use crate::board::Board;
-use crate::types::{Color, Move, MoveList, PieceType};
+use crate::types::{BitboardIterator, Color, Move, MoveList, PieceType};
 
 const A_FILE: u64 = 0x0101_0101_0101_0101;
 const H_FILE: u64 = 0x8080_8080_8080_8080;
@@ -28,7 +29,15 @@ impl<'a> MoveGenerator<'a> {
 
         if self.board.active_color == Color::White {
             self.generate_white_pawn_moves();
+        } else {
+            self.generate_black_pawn_moves();
         }
+
+        self.generate_knight_moves();
+        self.generate_bishop_moves();
+        self.generate_rook_moves();
+        self.generate_queen_moves();
+        self.generate_king_moves();
     }
 
     fn generate_white_pawn_moves(&mut self) {
@@ -44,82 +53,34 @@ impl<'a> MoveGenerator<'a> {
             }
         }
 
-        let mut single_pushes = (self.board.white_pawns << 8) & !self.board.all_occupancy;
-
-        let valid_single_pushes = single_pushes;
-
-        while single_pushes != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target_square = single_pushes.trailing_zeros() as u8;
-            let source_square = target_square - 8;
-
-            add_move(&mut self.moves, source_square, target_square);
-
-            single_pushes &= single_pushes - 1;
+        let single_pushes = (self.board.white_pawns << 8) & !self.board.all_occupancy;
+        for target in BitboardIterator(single_pushes) {
+            add_move(&mut self.moves, target - 8, target);
         }
 
-        let mut double_pushes = (valid_single_pushes << 8) & !self.board.all_occupancy & RANK_4;
-
-        while double_pushes != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target_square = double_pushes.trailing_zeros() as u8;
-            let source_square = target_square - 16;
-
-            self.moves.push(Move {
-                source: source_square,
-                target: target_square,
-                promotion: None,
-            });
-
-            double_pushes &= double_pushes - 1;
+        let double_pushes = (single_pushes << 8) & !self.board.all_occupancy & RANK_4;
+        for target in BitboardIterator(double_pushes) {
+            self.moves.push(Move { source: target - 16, target, promotion: None });
         }
 
-        let mut nw_attacks = (self.board.white_pawns & !A_FILE) << 7 & self.board.black_occupancy;
-
-        while nw_attacks != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target_square = nw_attacks.trailing_zeros() as u8;
-            let source_square = target_square - 7;
-
-            add_move(&mut self.moves, source_square, target_square);
-
-            nw_attacks &= nw_attacks - 1;
+        let nw_attacks = (self.board.white_pawns & !A_FILE) << 7 & self.board.black_occupancy;
+        for target in BitboardIterator(nw_attacks) {
+            add_move(&mut self.moves, target - 7, target);
         }
 
-        let mut ne_attacks = (self.board.white_pawns & !H_FILE) << 9 & self.board.black_occupancy;
-
-        while ne_attacks != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target_square = ne_attacks.trailing_zeros() as u8;
-            let source_square = target_square - 9;
-
-            add_move(&mut self.moves, source_square, target_square);
-
-            ne_attacks &= ne_attacks - 1;
+        let ne_attacks = (self.board.white_pawns & !H_FILE) << 9 & self.board.black_occupancy;
+        for target in BitboardIterator(ne_attacks) {
+            add_move(&mut self.moves, target - 9, target);
         }
 
-        let mut ep_nw = (self.board.white_pawns & !A_FILE) << 7 & self.board.en_passant_target;
-
-        while ep_nw != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target = ep_nw.trailing_zeros() as u8;
-            let source = target - 7;
-
-            self.moves.push(Move { source, target, promotion: None });
-
-            ep_nw &= ep_nw - 1;
+        let ep_nw = (self.board.white_pawns & !A_FILE) << 7 & self.board.en_passant_target;
+        for target in BitboardIterator(ep_nw) {
+            self.moves.push(Move { source: target - 7, target, promotion: None });
         }
 
-        let mut ep_ne = (self.board.white_pawns & !H_FILE) << 9 & self.board.en_passant_target;
-
-        while ep_ne != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target = ep_ne.trailing_zeros() as u8;
-            let source = target - 9;
-
-            self.moves.push(Move { source, target, promotion: None });
-
-            ep_ne &= ep_ne - 1;
+        let ep_ne = (self.board.white_pawns & !H_FILE) << 9 & self.board.en_passant_target;
+        for target in BitboardIterator(ep_ne) {
+            self.moves.push(Move { source: target - 9, target, promotion: None });
         }
     }
 
@@ -137,82 +98,73 @@ impl<'a> MoveGenerator<'a> {
             }
         }
 
-        let mut single_pushes = (self.board.black_pawns >> 8) & !self.board.all_occupancy;
-
-        let valid_single_pushes = single_pushes;
-
-        while single_pushes != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target_square = single_pushes.trailing_zeros() as u8;
-            let source_square = target_square + 8;
-
-            add_move(&mut self.moves, source_square, target_square);
-
-            single_pushes &= single_pushes - 1;
+        let single_pushes = (self.board.black_pawns >> 8) & !self.board.all_occupancy;
+        for target in BitboardIterator(single_pushes) {
+            add_move(&mut self.moves, target + 8, target);
         }
 
-        let mut double_pushes = (valid_single_pushes >> 8) & !self.board.all_occupancy & RANK_5;
-
-        while double_pushes != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target_square = double_pushes.trailing_zeros() as u8;
-            let source_square = target_square + 16;
-
-            self.moves.push(Move {
-                source: source_square,
-                target: target_square,
-                promotion: None,
-            });
-
-            double_pushes &= double_pushes - 1;
+        let double_pushes = (single_pushes >> 8) & !self.board.all_occupancy & RANK_5;
+        for target in BitboardIterator(double_pushes) {
+            self.moves.push(Move { source: target + 16, target, promotion: None });
         }
 
-        let mut sw_attacks = (self.board.black_pawns & !A_FILE) >> 9 & self.board.white_occupancy;
-
-        while sw_attacks != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target_square = sw_attacks.trailing_zeros() as u8;
-            let source_square = target_square + 9;
-
-            add_move(&mut self.moves, source_square, target_square);
-
-            sw_attacks &= sw_attacks - 1;
+        let sw_attacks = (self.board.black_pawns & !A_FILE) >> 9 & self.board.white_occupancy;
+        for target in BitboardIterator(sw_attacks) {
+            add_move(&mut self.moves, target + 9, target);
         }
 
-        let mut se_attacks = (self.board.black_pawns & !H_FILE) >> 7 & self.board.white_occupancy;
-
-        while se_attacks != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target_square = se_attacks.trailing_zeros() as u8;
-            let source_square = target_square + 7;
-
-            add_move(&mut self.moves, source_square, target_square);
-
-            se_attacks &= se_attacks - 1;
+        let se_attacks = (self.board.black_pawns & !H_FILE) >> 7 & self.board.white_occupancy;
+        for target in BitboardIterator(se_attacks) {
+            add_move(&mut self.moves, target + 7, target);
         }
 
-        let mut ep_sw = (self.board.black_pawns & !A_FILE) >> 9 & self.board.en_passant_target;
-
-        while ep_sw != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target = ep_sw.trailing_zeros() as u8;
-            let source = target + 9;
-
-            self.moves.push(Move { source, target, promotion: None });
-
-            ep_sw &= ep_sw - 1;
+        let ep_sw = (self.board.black_pawns & !A_FILE) >> 9 & self.board.en_passant_target;
+        for target in BitboardIterator(ep_sw) {
+            self.moves.push(Move { source: target + 9, target, promotion: None });
         }
 
-        let mut ep_se = (self.board.black_pawns & !H_FILE) >> 7 & self.board.en_passant_target;
+        let ep_se = (self.board.black_pawns & !H_FILE) >> 7 & self.board.en_passant_target;
+        for target in BitboardIterator(ep_se) {
+            self.moves.push(Move { source: target + 7, target, promotion: None });
+        }
+    }
 
-        while ep_se != 0 {
-            #[allow(clippy::cast_possible_truncation)]
-            let target = ep_se.trailing_zeros() as u8;
-            let source = target + 7;
+    fn generate_knight_moves(&mut self) {
+        let (knights, occupancy) = if self.board.active_color == Color::White {
+            (self.board.white_knights, self.board.white_occupancy)
+        } else {
+            (self.board.black_knights, self.board.black_occupancy)
+        };
 
-            self.moves.push(Move { source, target, promotion: None });
+        self.generate_leaper_moves(knights, occupancy, &KNIGHT_ATTACKS);
+    }
 
-            ep_se &= ep_se - 1;
+    fn generate_bishop_moves(&mut self) {}
+
+    fn generate_rook_moves(&mut self) {}
+
+    fn generate_queen_moves(&mut self) {}
+
+    fn generate_king_moves(&mut self) {
+        let (king, occupancy) = if self.board.active_color == Color::White {
+            (self.board.white_king, self.board.white_occupancy)
+        } else {
+            (self.board.black_king, self.board.black_occupancy)
+        };
+
+        self.generate_leaper_moves(king, occupancy, &KING_ATTACKS);
+
+        // TODO: Handle castling
+    }
+
+    #[inline(always)]
+    fn generate_leaper_moves(&mut self, pieces: u64, occupancy: u64, attacks_table: &[u64; 64]) {
+        for source in BitboardIterator(pieces) {
+            let attacks = attacks_table[source as usize] & !occupancy;
+
+            for target in BitboardIterator(attacks) {
+                self.moves.push(Move { source, target, promotion: None });
+            }
         }
     }
 
