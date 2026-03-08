@@ -1,4 +1,4 @@
-use crate::attacks::{KING_ATTACKS, KNIGHT_ATTACKS};
+use crate::attacks::{get_king_attacks, get_knight_attacks};
 use crate::board::Board;
 use crate::types::{BitboardIterator, Color, Move, MoveList, PieceType};
 
@@ -108,24 +108,24 @@ impl<'a> MoveGenerator<'a> {
             self.moves.push(Move { source: target + 16, target, promotion: None });
         }
 
+        let se_attacks = (self.board.black_pawns & !H_FILE) >> 7 & self.board.white_occupancy;
+        for target in BitboardIterator(se_attacks) {
+            add_move(&mut self.moves, target + 7, target);
+        }
+        
         let sw_attacks = (self.board.black_pawns & !A_FILE) >> 9 & self.board.white_occupancy;
         for target in BitboardIterator(sw_attacks) {
             add_move(&mut self.moves, target + 9, target);
         }
-
-        let se_attacks = (self.board.black_pawns & !H_FILE) >> 7 & self.board.white_occupancy;
-        for target in BitboardIterator(se_attacks) {
-            add_move(&mut self.moves, target + 7, target);
+        
+        let ep_se = (self.board.black_pawns & !H_FILE) >> 7 & self.board.en_passant_target;
+        for target in BitboardIterator(ep_se) {
+            self.moves.push(Move { source: target + 7, target, promotion: None });
         }
 
         let ep_sw = (self.board.black_pawns & !A_FILE) >> 9 & self.board.en_passant_target;
         for target in BitboardIterator(ep_sw) {
             self.moves.push(Move { source: target + 9, target, promotion: None });
-        }
-
-        let ep_se = (self.board.black_pawns & !H_FILE) >> 7 & self.board.en_passant_target;
-        for target in BitboardIterator(ep_se) {
-            self.moves.push(Move { source: target + 7, target, promotion: None });
         }
     }
 
@@ -136,7 +136,7 @@ impl<'a> MoveGenerator<'a> {
             (self.board.black_knights, self.board.black_occupancy)
         };
 
-        self.generate_leaper_moves(knights, occupancy, &KNIGHT_ATTACKS);
+        self.generate_leaper_moves(knights, occupancy, get_knight_attacks);
     }
 
     fn generate_bishop_moves(&mut self) {}
@@ -152,15 +152,16 @@ impl<'a> MoveGenerator<'a> {
             (self.board.black_king, self.board.black_occupancy)
         };
 
-        self.generate_leaper_moves(king, occupancy, &KING_ATTACKS);
+        self.generate_leaper_moves(king, occupancy, get_king_attacks);
 
         // TODO: Handle castling
     }
 
     #[inline(always)]
-    fn generate_leaper_moves(&mut self, pieces: u64, occupancy: u64, attacks_table: &[u64; 64]) {
+    fn generate_leaper_moves<F>(&mut self, pieces: u64, occupancy: u64, get_attacks: F)
+    where F: Fn(u8) -> u64{
         for source in BitboardIterator(pieces) {
-            let attacks = attacks_table[source as usize] & !occupancy;
+            let attacks = get_attacks(source) & !occupancy;
 
             for target in BitboardIterator(attacks) {
                 self.moves.push(Move { source, target, promotion: None });

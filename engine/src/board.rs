@@ -102,6 +102,100 @@ impl Board {
         fen.parse()
     }
 
+    pub fn to_fen(&self) -> String {
+        // A standard FEN string is typically around 60-90 characters.
+        let mut fen = String::with_capacity(90);
+
+        // 1. Piece placement
+        // FEN starts from Rank 8 (index 7) down to Rank 1 (index 0)
+        for rank in (0..8).rev() {
+            let mut empty_count = 0;
+
+            for file in 0..8 {
+                let square_index = rank * 8 + file;
+                let bit = 1u64 << square_index;
+
+                let piece_char = if (self.white_pawns & bit) != 0 { Some('P') }
+                else if (self.black_pawns & bit) != 0 { Some('p') }
+                else if (self.white_knights & bit) != 0 { Some('N') }
+                else if (self.black_knights & bit) != 0 { Some('n') }
+                else if (self.white_bishops & bit) != 0 { Some('B') }
+                else if (self.black_bishops & bit) != 0 { Some('b') }
+                else if (self.white_rooks & bit) != 0 { Some('R') }
+                else if (self.black_rooks & bit) != 0 { Some('r') }
+                else if (self.white_queens & bit) != 0 { Some('Q') }
+                else if (self.black_queens & bit) != 0 { Some('q') }
+                else if (self.white_king & bit) != 0 { Some('K') }
+                else if (self.black_king & bit) != 0 { Some('k') }
+                else { None };
+
+                if let Some(c) = piece_char {
+                    if empty_count > 0 {
+                        fen.push((b'0' + empty_count) as char);
+                        empty_count = 0;
+                    }
+                    fen.push(c);
+                } else {
+                    empty_count += 1;
+                }
+            }
+
+            if empty_count > 0 {
+                fen.push((b'0' + empty_count) as char);
+            }
+            if rank > 0 {
+                fen.push('/');
+            }
+        }
+
+        fen.push(' ');
+
+        // 2. Active color
+        match self.active_color {
+            Color::White => fen.push('w'),
+            Color::Black => fen.push('b'),
+        }
+
+        fen.push(' ');
+
+        // 3. Castling rights
+        if self.castling_rights == 0 {
+            fen.push('-');
+        } else {
+            if (self.castling_rights & 0b0001) != 0 { fen.push('K'); }
+            if (self.castling_rights & 0b0010) != 0 { fen.push('Q'); }
+            if (self.castling_rights & 0b0100) != 0 { fen.push('k'); }
+            if (self.castling_rights & 0b1000) != 0 { fen.push('q'); }
+        }
+
+        fen.push(' ');
+
+        // 4. En passant target square
+        if self.en_passant_target == 0 {
+            fen.push('-');
+        } else {
+            // Find the index of the set bit (0-63)
+            let idx = self.en_passant_target.trailing_zeros();
+            let file = (idx % 8) as u8;
+            let rank = (idx / 8) as u8;
+            fen.push((b'a' + file) as char);
+            fen.push((b'1' + rank) as char);
+        }
+
+        fen.push(' ');
+
+        // 5. Half-move clock
+        fen.push_str(&self.half_move_clock.to_string());
+
+        fen.push(' ');
+
+        // 6. Full-move number
+        fen.push_str(&self.full_move_number.to_string());
+
+        fen
+    }
+
+
     pub fn is_legal(&self) -> bool {
         // One king per side
         if self.white_king.count_ones() != 1 || self.black_king.count_ones() != 1 {
@@ -125,6 +219,12 @@ impl Board {
 impl Default for Board {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl std::fmt::Display for Board {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_fen())
     }
 }
 

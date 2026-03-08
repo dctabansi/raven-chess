@@ -1,6 +1,7 @@
 pub mod attacks;
 pub mod board;
 pub mod error;
+pub mod magic_constants;
 pub mod magics;
 pub mod movegen;
 pub mod types;
