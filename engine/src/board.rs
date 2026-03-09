@@ -268,7 +268,7 @@ impl std::str::FromStr for Board {
 
                     if file_index > 8 {
                         let rank = rank_index + 1;
-                        return Err(FenError::TooManyFilesInRank(rank));
+                        return Err(FenError::InvalidFileCountInRank(rank));
                     }
 
                     continue;
@@ -277,7 +277,7 @@ impl std::str::FromStr for Board {
                 if byte.is_ascii_alphabetic() {
                     if file_index >= 8 {
                         let rank = rank_index + 1;
-                        return Err(FenError::TooManyFilesInRank(rank));
+                        return Err(FenError::InvalidFileCountInRank(rank));
                     }
 
                     let square_index = rank_index * 8 + file_index;
@@ -305,7 +305,7 @@ impl std::str::FromStr for Board {
 
             if file_index != 8 {
                 let rank = rank_index + 1;
-                return Err(FenError::TooManyFilesInRank(rank));
+                return Err(FenError::InvalidFileCountInRank(rank));
             }
         }
 

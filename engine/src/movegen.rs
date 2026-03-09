@@ -1,4 +1,4 @@
-use crate::attacks::{get_king_attacks, get_knight_attacks};
+use crate::attacks::*;
 use crate::board::Board;
 use crate::types::{BitboardIterator, Color, Move, MoveList, PieceType};
 
@@ -139,11 +139,35 @@ impl<'a> MoveGenerator<'a> {
         self.generate_leaper_moves(knights, occupancy, get_knight_attacks);
     }
 
-    fn generate_bishop_moves(&mut self) {}
+    fn generate_bishop_moves(&mut self) {
+        let (bishops, occupancy) = if self.board.active_color == Color::White {
+            (self.board.white_bishops, self.board.white_occupancy)
+        } else {
+            (self.board.black_bishops, self.board.black_occupancy)
+        };
 
-    fn generate_rook_moves(&mut self) {}
+        self.generate_slider_moves(bishops, occupancy, get_bishop_attacks);
+    }
 
-    fn generate_queen_moves(&mut self) {}
+    fn generate_rook_moves(&mut self) {
+        let (rooks, occupancy) = if self.board.active_color == Color::White {
+            (self.board.white_rooks, self.board.white_occupancy)
+        } else {
+            (self.board.black_rooks, self.board.black_occupancy)
+        };
+
+        self.generate_slider_moves(rooks, occupancy, get_rook_attacks);
+    }
+
+    fn generate_queen_moves(&mut self) {
+        let (queens, occupancy) = if self.board.active_color == Color::White {
+            (self.board.white_queens, self.board.white_occupancy)
+        } else {
+            (self.board.black_queens, self.board.black_occupancy)
+        };
+
+        self.generate_slider_moves(queens, occupancy, get_queen_attacks);
+    }
 
     fn generate_king_moves(&mut self) {
         let (king, occupancy) = if self.board.active_color == Color::White {
@@ -164,6 +188,19 @@ impl<'a> MoveGenerator<'a> {
             let attacks = get_attacks(source) & !occupancy;
 
             for target in BitboardIterator(attacks) {
+                self.moves.push(Move { source, target, promotion: None });
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn generate_slider_moves<F>(&mut self, pieces: u64, friendly_occupancy: u64, get_attacks: F)
+    where F: Fn(u8, u64) -> u64 {
+        for source in BitboardIterator(pieces) {
+            let raw_attacks = get_attacks(source, self.board.all_occupancy);
+            let valid_attacks = raw_attacks & !friendly_occupancy;
+
+            for target in BitboardIterator(valid_attacks) {
                 self.moves.push(Move { source, target, promotion: None });
             }
         }

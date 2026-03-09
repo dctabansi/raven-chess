@@ -1,3 +1,6 @@
+use std::sync::Once;
+use crate::magic_constants::*;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Magic {
     pub mask: u64,
@@ -52,6 +55,96 @@ pub static mut ROOK_ATTACKS: [u64; 102400] = [0; 102400];
 // The Magic lookup instructions for each square
 pub static mut BISHOP_MAGICS: [Magic; 64] = [Magic { mask: 0, magic: 0, shift: 0, offset: 0 }; 64];
 pub static mut ROOK_MAGICS: [Magic; 64] = [Magic { mask: 0, magic: 0, shift: 0, offset: 0 }; 64];
+
+static INIT: Once = Once::new();
+
+pub fn init_magics() {
+    INIT.call_once(|| {
+        let mut bishop_offset = 0;
+        let mut rook_offset = 0;
+
+        for square in 0..64 {
+            let bishop_mask = mask_bishop_attacks(square);
+            let bishop_bits = BISHOP_RELEVANT_BITS[square as usize];
+            let bishop_permutations = 1 << bishop_bits;
+            let bishop_magic = BISHOP_MAGICS_ARRAY[square as usize];
+
+            unsafe {
+                BISHOP_MAGICS[square as usize] = Magic {
+                    mask: bishop_mask,
+                    magic: bishop_magic,
+                    shift: 64 - bishop_bits,
+                    offset: bishop_offset,
+                };
+            }
+
+            for index in 0..bishop_permutations {
+                let occupancy = set_occupancy(index, bishop_mask);
+                let attack = bishop_attacks_slow(square, occupancy);
+                let magic_index = (occupancy.wrapping_mul(bishop_magic)) >> (64 - bishop_bits);
+
+                unsafe {
+                    BISHOP_ATTACKS[bishop_offset + magic_index as usize] = attack;
+                }
+            }
+
+            bishop_offset += bishop_permutations;
+
+            let rook_mask = mask_rook_attacks(square);
+            let rook_bits = ROOK_RELEVANT_BITS[square as usize];
+            let rook_permutations = 1 << rook_bits;
+            let rook_magic = ROOK_MAGICS_ARRAY[square as usize];
+
+            unsafe {
+                ROOK_MAGICS[square as usize] = Magic {
+                    mask: rook_mask,
+                    magic: rook_magic,
+                    shift: 64 - rook_bits,
+                    offset: rook_offset,
+                };
+            }
+
+            for index in 0..rook_permutations {
+                let occupancy = set_occupancy(index, rook_mask);
+                let attack = rook_attacks_slow(square, occupancy);
+                let magic_index = (occupancy.wrapping_mul(rook_magic)) >> (64 - rook_bits);
+
+                unsafe {
+                    ROOK_ATTACKS[rook_offset + magic_index as usize] = attack;
+                }
+            }
+
+            rook_offset += rook_permutations;
+        }
+    });
+}
+
+#[inline(always)]
+fn get_magic_index(magic_entry: &Magic, occupancy: u64) -> usize {
+    let blockers = occupancy & magic_entry.mask;
+    ((blockers.wrapping_mul(magic_entry.magic)) >> magic_entry.shift) as usize
+}
+
+#[inline(always)]
+pub fn get_bishop_attacks(square: u8, occupancy: u64) -> u64 {
+    unsafe {
+        let magic_entry = &BISHOP_MAGICS[square as usize];
+        BISHOP_ATTACKS[magic_entry.offset + get_magic_index(magic_entry, occupancy)]
+    }
+}
+
+#[inline(always)]
+pub fn get_rook_attacks(square: u8, occupancy: u64) -> u64 {
+    unsafe {
+        let magic_entry = &ROOK_MAGICS[square as usize];
+        ROOK_ATTACKS[magic_entry.offset + get_magic_index(magic_entry, occupancy)]
+    }
+}
+
+#[inline(always)]
+pub fn get_queen_attacks(square: u8, occupancy: u64) -> u64 {
+    get_bishop_attacks(square, occupancy) | get_rook_attacks(square, occupancy)
+}
 
 pub const fn mask_bishop_attacks(square: u8) -> u64 {
     let target_rank = (square / 8) as i32;

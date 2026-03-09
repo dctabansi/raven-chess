@@ -8,8 +8,13 @@ pub mod types;
 
 use pyo3::prelude::*;
 
+pub fn init() {
+    magics::init_magics();
+}
+
 #[pymodule]
 fn engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    init();
     m.add_function(wrap_pyfunction!(add, m)?)?;
     Ok(())
 }

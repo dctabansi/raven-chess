@@ -3,7 +3,7 @@ pub enum FenError {
     MissingField(&'static str),
     InvalidRanksCount(usize),
     InvalidEmptySquares(u8),
-    TooManyFilesInRank(u32),
+    InvalidFileCountInRank(u32),
     InvalidCharacter(char),
     InvalidColor(String),
     InvalidCastlingCharacter(char),
@@ -24,7 +24,7 @@ impl std::fmt::Display for FenError {
             FenError::InvalidEmptySquares(val) => {
                 write!(f, "Invalid empty squares count: {}", val)
             }
-            FenError::TooManyFilesInRank(rank) => {
+            FenError::InvalidFileCountInRank(rank) => {
                 write!(f, "Rank {} has more than 8 files", rank)
             }
             FenError::InvalidCharacter(c) => {

@@ -1,3 +1,5 @@
+pub use crate::magics::{get_bishop_attacks, get_queen_attacks, get_rook_attacks};
+
 const A_FILE: u64 = 0x0101_0101_0101_0101;
 const AB_FILE: u64 = 0x0303_0303_0303_0303;
 const H_FILE: u64 = 0x8080_8080_8080_8080;
@@ -10,24 +12,6 @@ const KING_ATTACKS: [u64; 64] = generate_all_king_attacks();
 #[must_use]
 pub fn get_knight_attacks(square: u8) -> u64 {
     KNIGHT_ATTACKS[square as usize]
-}
-
-#[inline(always)]
-#[must_use]
-pub fn get_bishop_attacks(square: u8) -> u64 {
-    0u64
-}
-
-#[inline(always)]
-#[must_use]
-pub fn get_rook_attacks(square: u8) -> u64 {
-    0u64
-}
-
-#[inline(always)]
-#[must_use]
-pub fn get_queen_attacks(square: u8) -> u64 {
-    0u64
 }
 
 #[inline(always)]
