@@ -1,5 +1,8 @@
+use crate::constants::{
+    BISHOP_MAGICS_ARRAY, BISHOP_RELEVANT_BITS,
+    ROOK_MAGICS_ARRAY, ROOK_RELEVANT_BITS
+};
 use std::sync::Once;
-use crate::magic_constants::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Magic {

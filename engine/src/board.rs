@@ -1,5 +1,7 @@
+use crate::attacks::{get_bishop_attacks, get_king_attacks, get_knight_attacks, get_rook_attacks};
+use crate::constants::{A_FILE, CASTLING_RIGHTS_UPDATE, H_FILE};
 use crate::error::FenError;
-use crate::types::Color;
+use crate::types::{Color, Move, PieceType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Board {
@@ -96,6 +98,10 @@ impl Board {
 
             full_move_number: 1,
         }
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::new();
     }
 
     pub fn from_fen(fen: &str) -> Result<Self, FenError> {
@@ -195,25 +201,257 @@ impl Board {
         fen
     }
 
-
     pub fn is_legal(&self) -> bool {
-        // One king per side
+        // 1. One king per side
         if self.white_king.count_ones() != 1 || self.black_king.count_ones() != 1 {
             return false;
         }
 
-        // No pawns on ranks 1 or 8
+        // 2. No pawns on ranks 1 or 8
         let rank_1_8_mask: u64 = 0xFF00_0000_0000_00FF;
         if (self.white_pawns & rank_1_8_mask) != 0 || (self.black_pawns & rank_1_8_mask) != 0 {
             return false;
         }
 
+        // 3. Max 8 pawns per side
+        if self.white_pawns.count_ones() > 8 || self.black_pawns.count_ones() > 8 {
+            return false;
+        }
+
+        // 4. The Ghost Check: The opponent cannot be in check!
+        let (opponent_king, active_color) = if self.active_color == Color::White {
+            (self.black_king, Color::White) // If White's turn, Black King cannot be attacked by White
+        } else {
+            (self.white_king, Color::Black) // If Black's turn, White King cannot be attacked by Black
+        };
+
+        #[allow(clippy::cast_possible_truncation)]
+        let opponent_king_square = opponent_king.trailing_zeros() as u8;
+
+        if self.is_square_attacked(opponent_king_square, active_color) {
+            return false;
+        }
+
+        // 5. En Passant Geometry
+        if self.en_passant_target != 0 {
+            let ep_square = self.en_passant_target.trailing_zeros();
+            // Valid EP targets are strictly on Rank 3 (squares 16-23) or Rank 6 (squares 40-47)
+            if !(16..=23).contains(&ep_square) && !(40..=47).contains(&ep_square) {
+                return false;
+            }
+        }
+
         true
     }
 
-    pub fn reset(&mut self) {
-        *self = Self::new();
+    pub fn is_square_attacked(&self, square: u8, attacker: Color) -> bool {
+        let square_bitboard = 1u64 << square;
+        
+        let (
+            pawns,
+            knights,
+            bishops,
+            rooks,
+            queens,
+            king,
+        ) = if attacker == Color::White {
+            (
+                self.white_pawns,
+                self.white_knights,
+                self.white_bishops,
+                self.white_rooks,
+                self.white_queens,
+                self.white_king,
+            )
+        } else {
+            (
+                self.black_pawns,
+                self.black_knights,
+                self.black_bishops,
+                self.black_rooks,
+                self.black_queens,
+                self.black_king,
+            )
+        };
+
+        let pawn_attacks = if attacker == Color::White {
+            ((square_bitboard & !A_FILE) >> 9) | ((square_bitboard & !H_FILE) >> 7)
+        } else {
+            ((square_bitboard & !A_FILE) << 7) | ((square_bitboard & !H_FILE) << 9)
+        };
+
+        if (pawn_attacks & pawns) != 0 {
+            return true;
+        }
+
+        if (get_knight_attacks(square) & knights) != 0 {
+            return true;
+        }
+
+        let diagonal_attackers = bishops | queens;
+        if diagonal_attackers != 0 {
+            let diagonal_attacks = get_bishop_attacks(square, self.all_occupancy);
+            if (diagonal_attacks & diagonal_attackers) != 0 {
+                return true;
+            }
+        }
+
+        let orthogonal_attackers = rooks | queens;
+        if orthogonal_attackers != 0 {
+            let orthogonal_attacks = get_rook_attacks(square, self.all_occupancy);
+            if (orthogonal_attacks & orthogonal_attackers) != 0 {
+                return true;
+            }
+        }
+
+        if (get_king_attacks(square) & king) != 0 {
+            return true;
+        }
+
+        false
     }
+
+    pub fn piece_type_at(&self, square: u8, color: Color) -> Option<PieceType> {
+        let square_bitboard = 1u64 << square;
+
+        if color == Color::White {
+            if (self.white_pawns & square_bitboard) != 0 { return Some(PieceType::Pawn); }
+            if (self.white_knights & square_bitboard) != 0 { return Some(PieceType::Knight); }
+            if (self.white_bishops & square_bitboard) != 0 { return Some(PieceType::Bishop); }
+            if (self.white_rooks & square_bitboard) != 0 { return Some(PieceType::Rook); }
+            if (self.white_queens & square_bitboard) != 0 { return Some(PieceType::Queen); }
+            if (self.white_king & square_bitboard) != 0 { return Some(PieceType::King); }
+        } else {
+            if (self.black_pawns & square_bitboard) != 0 { return Some(PieceType::Pawn); }
+            if (self.black_knights & square_bitboard) != 0 { return Some(PieceType::Knight); }
+            if (self.black_bishops & square_bitboard) != 0 { return Some(PieceType::Bishop); }
+            if (self.black_rooks & square_bitboard) != 0 { return Some(PieceType::Rook); }
+            if (self.black_queens & square_bitboard) != 0 { return Some(PieceType::Queen); }
+            if (self.black_king & square_bitboard) != 0 { return Some(PieceType::King); }
+        }
+
+        None
+    }
+
+   pub fn make_move(&mut self, mv: Move) {
+        let source_bitboard = 1u64 << mv.source;
+        let target_bitboard = 1u64 << mv.target;
+        let move_mask = source_bitboard | target_bitboard;
+
+        let moving_piece = self.piece_type_at(mv.source, self.active_color)
+            .expect("Attempted to move non-existent piece");
+
+        let enemy_color = if self.active_color == Color::White {
+            Color::Black
+        } else {
+            Color::White
+        };
+
+        let captured_piece = self.piece_type_at(mv.target, enemy_color);
+
+        if moving_piece == PieceType::Pawn
+            && captured_piece.is_none()
+            && (mv.source % 8) != (mv.target % 8) {
+            let ep_capture_square = if self.active_color == Color::White {
+                mv.target - 8
+            } else {
+                mv.target + 8
+            };
+
+            let ep_capture_bitboard = 1u64 << ep_capture_square;
+
+            if self.active_color == Color::White {
+                self.black_pawns ^= ep_capture_bitboard;
+            } else {
+                self.white_pawns ^= ep_capture_bitboard;
+            }
+        }
+
+        #[inline]
+        fn get_bitboard_mut(board: &mut Board, color: Color, piece: PieceType) -> &mut u64 {
+            match (color, piece) {
+                (Color::White, PieceType::Pawn) => &mut board.white_pawns,
+                (Color::White, PieceType::Knight) => &mut board.white_knights,
+                (Color::White, PieceType::Bishop) => &mut board.white_bishops,
+                (Color::White, PieceType::Rook) => &mut board.white_rooks,
+                (Color::White, PieceType::Queen) => &mut board.white_queens,
+                (Color::White, PieceType::King) => &mut board.white_king,
+                (Color::Black, PieceType::Pawn) => &mut board.black_pawns,
+                (Color::Black, PieceType::Knight) => &mut board.black_knights,
+                (Color::Black, PieceType::Bishop) => &mut board.black_bishops,
+                (Color::Black, PieceType::Rook) => &mut board.black_rooks,
+                (Color::Black, PieceType::Queen) => &mut board.black_queens,
+                (Color::Black, PieceType::King) => &mut board.black_king,
+            }
+        }
+
+        if let Some(piece) = captured_piece {
+            *get_bitboard_mut(self, enemy_color, piece) ^= target_bitboard;
+        }
+
+        *get_bitboard_mut(self, self.active_color, moving_piece) ^= move_mask;
+
+        if let Some(promotion_piece) = mv.promotion {
+            if self.active_color == Color::White {
+                self.white_pawns ^= target_bitboard;
+            } else {
+                self.black_pawns ^= target_bitboard;
+            }
+
+            *get_bitboard_mut(self, self.active_color, promotion_piece) |= target_bitboard;
+        }
+
+        self.castling_rights &= CASTLING_RIGHTS_UPDATE[mv.source as usize]
+            & CASTLING_RIGHTS_UPDATE[mv.target as usize];
+
+        self.en_passant_target = 0;
+
+        if moving_piece == PieceType::Pawn {
+            let distance = (mv.target as i8 - mv.source as i8).abs();
+
+            if distance == 16 {
+                let ep_target = if self.active_color == Color::White {
+                    mv.source + 8
+                } else {
+                    mv.source - 8
+                };
+
+                self.en_passant_target = 1u64 << ep_target;
+            }
+        }
+
+        if moving_piece == PieceType::Pawn || captured_piece.is_some() {
+            self.half_move_clock = 0;
+        } else {
+            self.half_move_clock += 1;
+        }
+
+        if self.active_color == Color::Black {
+            self.full_move_number += 1;
+        }
+
+        if moving_piece == PieceType::King {
+            let distance = (mv.target as i8 - mv.source as i8).abs();
+            if distance == 2 {
+                match mv.target {
+                    6 => self.white_rooks ^= (1u64 << 7) | (1u64 << 5),
+                    2 => self.white_rooks ^= (1u64 << 0) | (1u64 << 3),
+                    62 => self.black_rooks ^= (1u64 << 63) | (1u64 << 61),
+                    58 => self.black_rooks ^= (1u64 << 56) | (1u64 << 59),
+                    _ => unreachable!("Invalid castling target square"),
+                }
+            }
+        }
+
+        self.white_occupancy = self.white_pawns | self.white_knights | self.white_bishops |
+            self.white_rooks | self.white_queens | self.white_king;
+        self.black_occupancy = self.black_pawns | self.black_knights | self.black_bishops |
+            self.black_rooks | self.black_queens | self.black_king;
+        self.all_occupancy = self.white_occupancy | self.black_occupancy;
+
+        self.active_color = enemy_color;
+    }
+
 }
 
 impl Default for Board {

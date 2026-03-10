@@ -1,12 +1,5 @@
+use crate::constants::{AB_FILE, A_FILE, GH_FILE, H_FILE, KING_ATTACKS, KNIGHT_ATTACKS};
 pub use crate::magics::{get_bishop_attacks, get_queen_attacks, get_rook_attacks};
-
-const A_FILE: u64 = 0x0101_0101_0101_0101;
-const AB_FILE: u64 = 0x0303_0303_0303_0303;
-const H_FILE: u64 = 0x8080_8080_8080_8080;
-const GH_FILE: u64 = 0xC0C0_C0C0_C0C0_C0C0;
-
-const KNIGHT_ATTACKS: [u64; 64] = generate_all_knight_attacks();
-const KING_ATTACKS: [u64; 64] = generate_all_king_attacks();
 
 #[inline(always)]
 #[must_use]
@@ -36,7 +29,7 @@ const fn mask_knight_attacks(square: u8) -> u64 {
     attacks
 }
 
-const fn generate_all_knight_attacks() -> [u64; 64] {
+pub(crate) const fn generate_all_knight_attacks() -> [u64; 64] {
     let mut table = [0; 64];
     let mut square = 0;
 
@@ -64,7 +57,7 @@ const fn mask_king_attacks(square: u8) -> u64 {
     attacks
 }
 
-const fn generate_all_king_attacks() -> [u64; 64] {
+pub(crate) const fn generate_all_king_attacks() -> [u64; 64] {
     let mut table = [0; 64];
     let mut square = 0;
 
