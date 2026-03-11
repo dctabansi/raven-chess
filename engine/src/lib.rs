@@ -5,11 +5,13 @@ pub mod error;
 pub mod magics;
 pub mod movegen;
 pub mod types;
+pub mod zobrist;
 
 use pyo3::prelude::*;
 
 pub fn init() {
     magics::init_magics();
+    zobrist::init_zobrist();
 }
 
 #[pymodule]

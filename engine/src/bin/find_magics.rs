@@ -5,35 +5,35 @@ use engine::magics::{
 };
 use std::fs::OpenOptions;
 use std::io::Write;
-
+use engine::zobrist::Prng;
 
 fn main() {
     // write_to_file("src/constants.rs");
     print_results();
 }
 
-#[derive(Debug)]
-struct Prng{
-    state: u64,
-}
-
-impl Prng{
-    fn new(seed: u64) -> Self{
-        Self { state: seed }
-    }
-
-    fn rand64(&mut self) -> u64{
-        self.state ^= self.state << 13;
-        self.state ^= self.state >> 7;
-        self.state ^= self.state << 17;
-
-        self.state
-    }
-
-    fn random_sparse_u64(&mut self) -> u64{
-        self.rand64() & self.rand64() & self.rand64()
-    }
-}
+// #[derive(Debug)]
+// struct Prng{
+//     state: u64,
+// }
+//
+// impl Prng{
+//     fn new(seed: u64) -> Self{
+//         Self { state: seed }
+//     }
+//
+//     fn rand64(&mut self) -> u64{
+//         self.state ^= self.state << 13;
+//         self.state ^= self.state >> 7;
+//         self.state ^= self.state << 17;
+//
+//         self.state
+//     }
+//
+//     fn random_sparse_u64(&mut self) -> u64{
+//         self.rand64() & self.rand64() & self.rand64()
+//     }
+// }
 
 fn find_magic(square: u8, relevant_bits: u8, is_rook: bool) -> u64{
     let mask = if is_rook {

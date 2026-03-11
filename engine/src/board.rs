@@ -2,6 +2,7 @@ use crate::attacks::{get_bishop_attacks, get_king_attacks, get_knight_attacks, g
 use crate::constants::{A_FILE, CASTLING_RIGHTS_UPDATE, H_FILE};
 use crate::error::FenError;
 use crate::types::{Color, Move, PieceType};
+use crate::zobrist::{get_piece_index, CASTLE_KEYS, EN_PASSANT_KEYS, PIECE_KEYS, SIDE_KEY};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Board {
@@ -31,6 +32,8 @@ pub struct Board {
 
     pub half_move_clock: u8,
     pub full_move_number: u16,
+
+    pub hash: u64,
 }
 
 impl Board {
@@ -65,6 +68,8 @@ impl Board {
 
             half_move_clock: 0,
             full_move_number: 1,
+
+            hash: 0,
         }
     }
 
@@ -97,6 +102,8 @@ impl Board {
             half_move_clock: 0,
 
             full_move_number: 1,
+
+            hash: 0,
         }
     }
 
@@ -333,7 +340,7 @@ impl Board {
         None
     }
 
-   pub fn make_move(&mut self, mv: Move) {
+    pub fn make_move(&mut self, mv: Move) {
         let source_bitboard = 1u64 << mv.source;
         let target_bitboard = 1u64 << mv.target;
         let move_mask = source_bitboard | target_bitboard;
@@ -348,6 +355,19 @@ impl Board {
         };
 
         let captured_piece = self.piece_type_at(mv.target, enemy_color);
+        
+        if self.en_passant_target != 0 {
+            let ep_square = self.en_passant_target.trailing_zeros();
+            unsafe { self.hash ^= EN_PASSANT_KEYS[(ep_square % 8) as usize]; }
+            
+        }
+        unsafe { self.hash ^= CASTLE_KEYS[self.castling_rights as usize]; }
+        
+        let moving_idx = get_piece_index(self.active_color, moving_piece);
+        unsafe {
+            self.hash ^= PIECE_KEYS[moving_idx][mv.source as usize];
+            self.hash ^= PIECE_KEYS[moving_idx][mv.target as usize];
+        }
 
         if moving_piece == PieceType::Pawn
             && captured_piece.is_none()
@@ -364,6 +384,11 @@ impl Board {
                 self.black_pawns ^= ep_capture_bitboard;
             } else {
                 self.white_pawns ^= ep_capture_bitboard;
+            }
+            
+            let ep_pawn_idx = get_piece_index(enemy_color, PieceType::Pawn);
+            unsafe {
+                self.hash ^= PIECE_KEYS[ep_pawn_idx][ep_capture_square as usize];
             }
         }
 
@@ -387,6 +412,9 @@ impl Board {
 
         if let Some(piece) = captured_piece {
             *get_bitboard_mut(self, enemy_color, piece) ^= target_bitboard;
+            
+            let captured_idx = get_piece_index(enemy_color, piece);
+            unsafe { self.hash ^= PIECE_KEYS[captured_idx][mv.target as usize]; }
         }
 
         *get_bitboard_mut(self, self.active_color, moving_piece) ^= move_mask;
@@ -399,6 +427,13 @@ impl Board {
             }
 
             *get_bitboard_mut(self, self.active_color, promotion_piece) |= target_bitboard;
+
+            let pawn_idx = get_piece_index(self.active_color, PieceType::Pawn);
+            let promo_idx = get_piece_index(self.active_color, promotion_piece);
+            unsafe {
+                self.hash ^= PIECE_KEYS[pawn_idx][mv.target as usize];
+                self.hash ^= PIECE_KEYS[promo_idx][mv.target as usize];
+            }
         }
 
         self.castling_rights &= CASTLING_RIGHTS_UPDATE[mv.source as usize]
@@ -433,15 +468,37 @@ impl Board {
         if moving_piece == PieceType::King {
             let distance = (mv.target as i8 - mv.source as i8).abs();
             if distance == 2 {
+                let rook_idx = get_piece_index(self.active_color, PieceType::Rook);
                 match mv.target {
-                    6 => self.white_rooks ^= (1u64 << 7) | (1u64 << 5),
-                    2 => self.white_rooks ^= (1u64 << 0) | (1u64 << 3),
-                    62 => self.black_rooks ^= (1u64 << 63) | (1u64 << 61),
-                    58 => self.black_rooks ^= (1u64 << 56) | (1u64 << 59),
+                    6 =>  {
+                        self.white_rooks ^= (1u64 << 7) | (1u64 << 5);
+                        unsafe { self.hash ^= PIECE_KEYS[rook_idx][7] ^ PIECE_KEYS[rook_idx][5]; }
+                    }
+                    2 => {
+                        self.white_rooks ^= (1u64 << 0) | (1u64 << 3);
+                        unsafe { self.hash ^= PIECE_KEYS[rook_idx][0] ^ PIECE_KEYS[rook_idx][3]; }
+                    }
+                    62 => {
+                        self.black_rooks ^= (1u64 << 63) | (1u64 << 61);
+                        unsafe { self.hash ^= PIECE_KEYS[rook_idx][63] ^ PIECE_KEYS[rook_idx][61]; }
+                    }
+                    58 => {
+                        self.black_rooks ^= (1u64 << 56) | (1u64 << 59);
+                        unsafe { self.hash ^= PIECE_KEYS[rook_idx][56] ^ PIECE_KEYS[rook_idx][59]; }
+                    }
                     _ => unreachable!("Invalid castling target square"),
                 }
             }
         }
+
+        unsafe { self.hash ^= CASTLE_KEYS[self.castling_rights as usize]; }
+
+        if self.en_passant_target != 0 {
+            let ep_square = self.en_passant_target.trailing_zeros();
+            unsafe { self.hash ^= EN_PASSANT_KEYS[(ep_square % 8) as usize]; }
+        }
+
+        unsafe { self.hash ^= SIDE_KEY; }
 
         self.white_occupancy = self.white_pawns | self.white_knights | self.white_bishops |
             self.white_rooks | self.white_queens | self.white_king;
@@ -450,6 +507,48 @@ impl Board {
         self.all_occupancy = self.white_occupancy | self.black_occupancy;
 
         self.active_color = enemy_color;
+    }
+
+    pub fn calculate_hash(&self) -> u64 {
+        let mut final_hash = 0;
+
+        let bitboards = [
+            (self.white_pawns, Color::White, PieceType::Pawn),
+            (self.white_knights, Color::White, PieceType::Knight),
+            (self.white_bishops, Color::White, PieceType::Bishop),
+            (self.white_rooks, Color::White, PieceType::Rook),
+            (self.white_queens, Color::White, PieceType::Queen),
+            (self.white_king, Color::White, PieceType::King),
+            (self.black_pawns, Color::Black, PieceType::Pawn),
+            (self.black_knights, Color::Black, PieceType::Knight),
+            (self.black_bishops, Color::Black, PieceType::Bishop),
+            (self.black_rooks, Color::Black, PieceType::Rook),
+            (self.black_queens, Color::Black, PieceType::Queen),
+            (self.black_king, Color::Black, PieceType::King),
+        ];
+
+        for &(mut bb, color, piece_type) in &bitboards {
+            let piece_idx = get_piece_index(color, piece_type);
+            while bb != 0 {
+                let square = bb.trailing_zeros() as usize;
+                unsafe { final_hash ^= PIECE_KEYS[piece_idx][square]; }
+                bb &= bb - 1;
+            }
+        }
+
+        if self.active_color == Color::Black {
+            unsafe { final_hash ^= SIDE_KEY; }
+        }
+
+        unsafe { final_hash ^= CASTLE_KEYS[self.castling_rights as usize]; }
+
+        if self.en_passant_target != 0 {
+            let ep_square = self.en_passant_target.trailing_zeros();
+            let file = (ep_square % 8) as usize;
+            unsafe { final_hash ^= EN_PASSANT_KEYS[file]; }
+        }
+
+        final_hash
     }
 
 }
