@@ -4,7 +4,4 @@
     <option name="sdkName" value="3.14 WSL (archlinux): (/home/shado/dev/RavenChess/backend/.venv/bin/python)" />
   </component>
   <component name="ProjectRootManager" version="2" project-jdk-name="3.14 WSL (archlinux): (/home/shado/dev/RavenChess/backend/.venv/bin/python)" project-jdk-type="Python SDK" />
-  <component name="RuffConfiguration">
-    <option name="enabled" value="true" />
-  </component>
 </project>
