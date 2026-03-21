@@ -80,6 +80,15 @@ impl Default for MoveList {
     }
 }
 
+impl std::ops::Index<usize> for MoveList {
+    type Output = Move;
+
+    #[inline(always)]
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.moves[index]
+    }
+}
+
 pub struct BitboardIterator(pub u64);
 
 impl Iterator for BitboardIterator {

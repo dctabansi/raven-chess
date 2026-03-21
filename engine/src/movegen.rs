@@ -29,7 +29,7 @@ impl<'a> MoveGenerator<'a> {
         };
 
         for i in 0..pseudo_moves.count {
-            let mv = pseudo_moves.moves[i];
+            let mv = pseudo_moves[i];
             let mut test_board = self.board.clone();
 
             test_board.make_move(mv);

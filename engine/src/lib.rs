@@ -5,6 +5,7 @@ pub mod error;
 pub mod eval;
 pub mod magics;
 pub mod movegen;
+pub mod search;
 pub mod types;
 pub mod zobrist;
 
