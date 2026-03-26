@@ -1,5 +1,5 @@
 use crate::board::Board;
-use crate::types::{BitboardIterator, Color};
+use crate::types::{BitboardIterator, Color, PieceType};
 
 // Material values in centipawns
 const PAWN_VALUE: i32 = 100;
@@ -105,5 +105,16 @@ pub fn evaluate(board: &Board) -> i32 {
         score
     } else {
         -score
+    }
+}
+
+pub fn get_piece_value(piece_type: PieceType) -> i32 {
+    match piece_type {
+        PieceType::Pawn => PAWN_VALUE,
+        PieceType::Knight => KNIGHT_VALUE,
+        PieceType::Bishop => BISHOP_VALUE,
+        PieceType::Rook => ROOK_VALUE,
+        PieceType::Queen => QUEEN_VALUE,
+        PieceType::King => KING_VALUE,
     }
 }

@@ -3,11 +3,15 @@ use engine::init;
 use engine::movegen::MoveGenerator;
 use engine::search::search_position;
 use std::time::Instant;
+use engine::tt::TranspositionTable;
 
 //noinspection SpellCheckingInspection
 fn main() {
     init();
     println!("RavenChess Engine Magics Initialized.\n");
+
+    // Allocate 64MB for Transposition Table
+    let mut tt = TranspositionTable::new(64);
 
     // Standard starting position
     let fen1 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -20,10 +24,10 @@ fn main() {
     // perft_divide(&board, 5);
 
     println!("Search on FEN: {fen1}");
-    run_search(&board1, 5);
+    run_search(&board1, 6, &mut tt);
 
     println!("Search on FEN: {fen2}");
-    run_search(&board2, 4);
+    run_search(&board2, 4, &mut tt);
 }
 
 // The recursive tree-walking function
@@ -86,11 +90,11 @@ pub fn perft_divide(board: &Board, depth: u8) -> u64 {
     total_nodes
 }
 
-pub fn run_search(board: &Board, depth: u8) {
+pub fn run_search(board: &Board, depth: u8, tt: &mut TranspositionTable) {
     println!("Searching depth {depth}...");
     let start_time = Instant::now();
 
-    let (best_move, score) = search_position(board, depth);
+    let (best_move, score) = search_position(board, depth, tt);
     let duration = start_time.elapsed();
 
     if let Some(mv) = best_move {

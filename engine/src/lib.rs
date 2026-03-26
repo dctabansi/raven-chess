@@ -6,6 +6,7 @@ pub mod eval;
 pub mod magics;
 pub mod movegen;
 pub mod search;
+pub mod tt;
 pub mod types;
 pub mod zobrist;
 
